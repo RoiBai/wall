@@ -744,7 +744,7 @@ async function loadSnapshotIfAny(){
   }
   if (!data) return;
 
-  // 1) load baked wall snapshot (cache-bust!)
+  // load baked wall snapshot (cache-bust)
   if (data.snapshot_url) {
     const v = data.snapshot_updated_at ? Date.parse(data.snapshot_updated_at) : Date.now();
     const snapUrl = `${data.snapshot_url}?v=${v}`;
@@ -754,7 +754,7 @@ async function loadSnapshotIfAny(){
     wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
   }
 
-  // 2) load current top sticker (also cache-bust)
+  // load current top sticker (cache-bust)
   if (data.top_image_url && data.top_payload) {
     const v2 = data.snapshot_updated_at ? Date.parse(data.snapshot_updated_at) : Date.now();
     const topUrl = `${data.top_image_url}?v=${v2}`;
@@ -839,27 +839,27 @@ function loadImageAsync(url) {
 }
 
 async function onRemoteCapture(row) {
-  // 1) bake previous top into wall + update snapshot
+  // 1) 如果有旧 topSticker：先用服务器最新快照覆盖 wallBase，避免用不完整的墙上传
   if (topSticker) {
-    bakeTopStickerToWall();
-    await uploadWallSnapshot(); // 确保 snapshot_url 写回 room_state
+    await refreshWallBaseFromServer();  // ✅ 关键：先对齐到服务器全量墙
+    bakeTopStickerToWall();             // ✅ 再把上一层 bake 进去
+    await uploadWallSnapshot();         // ✅ 再上传新的全量墙
   }
 
-  // 2) persist current top info to room_state (so new users can see it)
+  // 2) 记录新的 topSticker 信息到 room_state（你已有）
   await sb.from("room_state").upsert([{
     room: ROOM,
     top_image_url: row.payload.imageUrl,
     top_sticker_id: row.sticker_id,
     top_user_id: row.user_id,
     top_payload: { x: row.payload.x, y: row.payload.y, s: row.payload.s },
-    snapshot_updated_at: new Date().toISOString()
   }]);
 
-  // 3) create the new topSticker
+  // 3) 创建新的 topSticker
   currentTopStickerId = row.sticker_id;
   currentTopOwnerId = row.user_id;
 
-  const img = await loadImageAsync(row.payload.imageUrl);
+  const img = await loadImageAsync(`${row.payload.imageUrl}?v=${Date.now()}`);
   const g = createGraphics(img.width, img.height);
   g.pixelDensity(1);
   g.clear();
@@ -910,46 +910,22 @@ async function uploadWallSnapshot() {
   return url;
 }
 
-async function loadSnapshotIfAny(){
+async function refreshWallBaseFromServer() {
   const { data, error } = await sb.from("room_state")
-    .select("snapshot_url, top_image_url, top_sticker_id, top_user_id, top_payload")
+    .select("snapshot_url, snapshot_updated_at")
     .eq("room", ROOM)
     .maybeSingle();
 
   if (error) {
-    console.warn("room_state read error:", error);
+    console.warn("refreshWallBaseFromServer error:", error);
     return;
   }
-  if (!data) return;
+  if (!data || !data.snapshot_url) return;
 
-  // 1) load baked wall snapshot
-  if (data.snapshot_url) {
-    const img = await loadImageAsync(data.snapshot_url);
-    wallBase.clear();
-    wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
-  }
+  const v = data.snapshot_updated_at ? Date.parse(data.snapshot_updated_at) : Date.now();
+  const snapUrl = `${data.snapshot_url}?v=${v}`;
 
-  // 2) load current top sticker on top of wall
-  if (data.top_image_url && data.top_payload) {
-    const img2 = await loadImageAsync(data.top_image_url);
-    const g = createGraphics(img2.width, img2.height);
-    g.pixelDensity(1);
-    g.clear();
-    g.image(img2, 0, 0);
-
-    currentTopStickerId = data.top_sticker_id;
-    currentTopOwnerId = data.top_user_id;
-
-    topSticker = {
-      gfx: g,
-      x: data.top_payload.x,
-      y: data.top_payload.y,
-      s: data.top_payload.s,
-      dragging: false,
-      resizing: false,
-      dx: 0,
-      dy: 0,
-      editable: (data.top_user_id === USER_ID)
-    };
-  }
+  const img = await loadImageAsync(snapUrl);
+  wallBase.clear();
+  wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
 }
