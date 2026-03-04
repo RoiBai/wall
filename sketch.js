@@ -1,4 +1,3 @@
-// ===== Supabase CONFIG =====
 const SUPABASE_URL = "https://gobqzibnugfsypmdadss.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvYnF6aWJudWdmc3lwbWRhZHNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzQwOTgsImV4cCI6MjA4ODA1MDA5OH0.l99SE5sdkZ9ipI5KZ1IYyPtLs1co1fA4e9WPrb-lJII";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -846,14 +845,12 @@ function loadImageAsync(url) {
 }
 
 async function onRemoteCapture(row) {
-  // 1) 如果有旧 topSticker：先用服务器最新快照覆盖 wallBase，避免用不完整的墙上传
   if (topSticker) {
-    await refreshWallBaseFromServer();  // ✅ 关键：先对齐到服务器全量墙
-    bakeTopStickerToWall();             // ✅ 再把上一层 bake 进去
-    await uploadWallSnapshot();         // ✅ 再上传新的全量墙
+    await refreshWallBaseFromServer();  
+    bakeTopStickerToWall();             
+    await uploadWallSnapshot();         
   }
 
-  // 2) 记录新的 topSticker 信息到 room_state（你已有）
   await sb.from("room_state").upsert([{
     room: ROOM,
     top_image_url: row.payload.imageUrl,
@@ -861,8 +858,7 @@ async function onRemoteCapture(row) {
     top_user_id: row.user_id,
     top_payload: { x: row.payload.x, y: row.payload.y, s: row.payload.s },
   }]);
-
-  // 3) 创建新的 topSticker
+  
   currentTopStickerId = row.sticker_id;
   currentTopOwnerId = row.user_id;
 
@@ -950,4 +946,5 @@ async function uploadStickerGraphic(gfx, stickerId) {
 
   const { data } = sb.storage.from("stickers").getPublicUrl(path);
   return data.publicUrl;
+
 }
