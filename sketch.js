@@ -473,7 +473,6 @@ function captureAndMergeToWall(){
   ctx.restore();
   ctx.globalCompositeOperation = "source-over";
 
-  // ✅ publish only (do NOT set topSticker here, do NOT bake here)
   (async () => {
     try{
       const stickerId = crypto.randomUUID();
@@ -948,3 +947,4 @@ async function uploadStickerGraphic(gfx, stickerId) {
   return data.publicUrl;
 
 }
+
